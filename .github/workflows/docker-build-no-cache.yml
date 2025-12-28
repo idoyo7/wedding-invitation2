@@ -99,6 +99,43 @@ jobs:
       contents: write
     
     steps:
+    - name: Verify GitHub Token
+      run: |
+        echo "--- Verifying GitHub Token ---"
+        if [ -z "${{ secrets.PERSONAL_GITHUB_TOKEN }}" ]; then
+          echo "❌ PERSONAL_GITHUB_TOKEN is not set!"
+          exit 1
+        fi
+        echo "✅ PERSONAL_GITHUB_TOKEN is set"
+        
+        # 토큰으로 montstrap 저장소 접근 테스트
+        echo "Testing access to ${{ env.MONTSTRAP_REPO }}..."
+        RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.PERSONAL_GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ env.MONTSTRAP_REPO }}")
+        
+        if echo "$RESPONSE" | grep -q '"message": "Not Found"'; then
+          echo "❌ montstrap 저장소를 찾을 수 없거나 접근 권한이 없습니다!"
+          echo "확인사항:"
+          echo "1. 저장소명: ${{ env.MONTSTRAP_REPO }}"
+          echo "2. 토큰 소유자가 해당 저장소에 접근 권한이 있는지"
+          echo "3. 토큰 스코프에 'repo' (private) 또는 'public_repo' (public)가 포함되어 있는지"
+          exit 1
+        elif echo "$RESPONSE" | grep -q '"message": "Bad credentials"'; then
+          echo "❌ GitHub 토큰이 유효하지 않습니다!"
+          exit 1
+        else
+          echo "✅ montstrap 저장소 접근 성공"
+          echo "$RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(f'저장소: {data[\"full_name\"]}')
+    print(f'기본 브랜치: {data[\"default_branch\"]}')
+    print(f'Private: {data[\"private\"]}')
+except: pass
+          "
+        fi
+
     - name: Checkout montstrap repository
       uses: actions/checkout@v4
       with:
@@ -106,18 +143,24 @@ jobs:
         token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         path: montstrap
         
-    - name: Verify montstrap checkout
+    - name: Verify montstrap checkout and setup
       run: |
         echo "--- Verifying montstrap repository checkout ---"
         echo "Repository: ${{ env.MONTSTRAP_REPO }}"
-        echo "Target path: ${{ env.MONTSTRAP_PATH }}"
+        echo "Target manifest: ${{ env.MONTSTRAP_PATH }}"
         echo ""
-        echo "Checking montstrap directory structure:"
-        ls -la montstrap/ || echo "❌ montstrap directory not found"
+        
+        if [ ! -d "montstrap" ]; then
+          echo "❌ montstrap 디렉토리가 생성되지 않았습니다!"
+          exit 1
+        fi
+        
+        echo "montstrap 디렉토리 구조:"
+        find montstrap -type f -name "*.yaml" -o -name "*.yml" | head -10 || echo "YAML 파일 없음"
         echo ""
-        echo "Checking if wedding-invitation directory exists:"
-        ls -la montstrap/wedding-invitation/ || echo "❌ wedding-invitation directory not found (will be created)"
-        echo ""
+        
+        echo "wedding-invitation 디렉토리 확인:"
+        ls -la montstrap/wedding-invitation/ || echo "wedding-invitation 디렉토리 없음 (생성 예정)"
 
     - name: Update deployment manifest
       id: update-manifest
@@ -125,73 +168,112 @@ jobs:
         echo "--- Updating Deployment Manifest ---"
         cd montstrap
         
-        # 대상 디렉토리 및 파일 경로
+        # 환경 변수 설정
         MANIFEST_DIR="wedding-invitation/manifests"
         MANIFEST_FILE="${MANIFEST_DIR}/deployment.yaml"
-
-        echo "Checking for directory: ${MANIFEST_DIR}"
-        if [ ! -d "${MANIFEST_DIR}" ]; then
-          echo "Directory ${MANIFEST_DIR} not found. Creating it..."
-          mkdir -p "${MANIFEST_DIR}"
-          echo "Directory created: ${MANIFEST_DIR}"
-        fi
-
-        echo "Checking for file: ${MANIFEST_FILE}"
+        NEW_IMAGE_TAG="${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}"
+        
+        echo "🎯 Target manifest: ${MANIFEST_FILE}"
+        echo "🏷️ New image tag: ${NEW_IMAGE_TAG}"
+        echo ""
+        
+        # 디렉토리 생성
+        echo "📁 Creating directory structure..."
+        mkdir -p "${MANIFEST_DIR}"
+        echo "✅ Directory created: ${MANIFEST_DIR}"
+        
+        # deployment.yaml 파일 생성/업데이트
         if [ ! -f "${MANIFEST_FILE}" ]; then
-          echo "File ${MANIFEST_FILE} not found. Creating a new one..."
-          # 새로운 deployment.yaml 파일 생성
-          cat > "${MANIFEST_FILE}" << EOF
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: wedding-invitation
-          namespace: wedding-invitation
-          labels:
-            app: wedding-invitation
-        spec:
-          replicas: 2
-          revisionHistoryLimit: 2
-          selector:
-            matchLabels:
-              app: wedding-invitation
-          template:
-            metadata:
-              labels:
-                app: wedding-invitation
-            spec:
-              containers:
-                - name: wedding-invitation
-                  image: ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}
-                  ports:
-                    - containerPort: 3000
-        EOF
-          echo "New deployment.yaml created"
+          echo "📝 Creating new deployment.yaml..."
+          cat > "${MANIFEST_FILE}" << 'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wedding-invitation
+  namespace: wedding-invitation
+  labels:
+    app: wedding-invitation
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: wedding-invitation
+  template:
+    metadata:
+      labels:
+        app: wedding-invitation
+    spec:
+      containers:
+        - name: wedding-invitation
+          image: PLACEHOLDER_IMAGE
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_NAVER_MAP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: wedding-invitation-secrets
+                  key: naver-map-client-id
+EOF
+          echo "✅ New deployment.yaml created with placeholder"
         else
-          echo "Existing deployment.yaml found"
+          echo "📄 Existing deployment.yaml found"
         fi
         
-        # 현재 이미지 태그 확인 (디버깅 강화)
-        echo "Current deployment.yaml content (image line):"
-        grep -n "image:" "${MANIFEST_FILE}" || echo "❌ No image line found"
+        # 현재 상태 확인
         echo ""
-        echo "Full deployment.yaml content for debugging:"
+        echo "📋 Current deployment.yaml content:"
+        echo "----------------------------------------"
         cat "${MANIFEST_FILE}"
+        echo "----------------------------------------"
         
-        # 이미지 태그 업데이트 (더 정확한 패턴 매칭)
-        echo "Updating image tag to: ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}"
-        sed -i "s|image: ${{ env.IMAGE_NAME }}:.*|image: ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}|g" "${MANIFEST_FILE}"
-        
-        # 변경사항 확인
+        # 이미지 태그 업데이트 (더 강력한 패턴)
         echo ""
-        echo "✅ Updated deployment.yaml (image line):"
-        grep -n "image:" "${MANIFEST_FILE}"
+        echo "🔄 Updating image tag..."
         
-        # 변경사항이 있는지 확인
-        if git diff --exit-code --quiet "${MANIFEST_FILE}"; then
-          echo "No changes to deployment.yaml. Skipping commit."
+        # 1단계: PLACEHOLDER_IMAGE를 새 이미지로 교체
+        sed -i "s|PLACEHOLDER_IMAGE|${NEW_IMAGE_TAG}|g" "${MANIFEST_FILE}"
+        
+        # 2단계: 기존 montkim9/wedding-invitation 이미지를 새 태그로 교체
+        sed -i "s|image: montkim9/wedding-invitation:.*|image: ${NEW_IMAGE_TAG}|g" "${MANIFEST_FILE}"
+        
+        # 3단계: 일반적인 패턴으로 교체 (추가 안전장치)
+        sed -i "s|image: .*montkim9/wedding-invitation.*|image: ${NEW_IMAGE_TAG}|g" "${MANIFEST_FILE}"
+        
+        echo "✅ Image tag update completed"
+        
+        # 업데이트 후 상태 확인
+        echo ""
+        echo "📋 Updated deployment.yaml content:"
+        echo "----------------------------------------"
+        cat "${MANIFEST_FILE}"
+        echo "----------------------------------------"
+        
+        # 이미지 라인 하이라이트
+        echo ""
+        echo "🏷️ Updated image line:"
+        grep -n "image:" "${MANIFEST_FILE}" || echo "❌ No image line found!"
+        
+        # Git 변경사항 확인
+        echo ""
+        echo "📝 Git diff output:"
+        git add "${MANIFEST_FILE}"
+        git diff --cached "${MANIFEST_FILE}" || echo "No changes detected"
+        
+        # 변경사항이 있는지 확인 (더 정확한 방법)
+        if git diff --cached --quiet "${MANIFEST_FILE}"; then
+          echo "❌ No changes to deployment.yaml. This might indicate an update failure."
           echo "changes_made=false" >> $GITHUB_OUTPUT
+          
+          # 디버깅을 위해 sed 결과 재확인
+          echo ""
+          echo "🔍 Debugging sed results:"
+          echo "Target pattern: montkim9/wedding-invitation:*"
+          echo "Replacement: ${NEW_IMAGE_TAG}"
+          grep -E "(montkim9/wedding-invitation|image:)" "${MANIFEST_FILE}" || echo "Pattern not found"
         else
-          echo "Changes detected in deployment.yaml. Committing..."
+          echo "✅ Changes detected in deployment.yaml!"
           echo "changes_made=true" >> $GITHUB_OUTPUT
         fi
 
@@ -201,54 +283,132 @@ jobs:
         echo "--- Committing & Pushing Changes ---"
         cd montstrap
         
-        # Git 설정 확인
-        echo "Setting up git configuration..."
+        # Git 설정
+        echo "🔧 Setting up git configuration..."
         git config user.name "${{ github.actor }}"
         git config user.email "${{ github.actor }}@users.noreply.github.com"
         
-        echo "Git configuration:"
-        git config --list | grep user || echo "No user config found"
+        echo "📝 Git configuration:"
+        git config --list | grep user
         
-        # 현재 상태 확인
+        # 현재 브랜치 확인
         echo ""
-        echo "Git status before add:"
-        git status
+        echo "🌿 Current branch info:"
+        git branch -a
+        echo "Current branch: $(git branch --show-current)"
         
-        # 변경사항 추가
+        # 상태 확인
         echo ""
-        echo "Adding changes..."
-        git add .
+        echo "📊 Git status:"
+        git status --porcelain
         
-        echo "Git status after add:"
-        git status
-        
-        # 커밋
+        # 변경된 파일 확인
         echo ""
-        echo "Creating commit..."
-        git commit -m "🚀 Update wedding-invitation image tag to ${{ env.SHORT_SHA }}"
+        echo "📋 Changed files:"
+        git diff --name-only HEAD
         
-        # 리모트 확인
+        # 커밋 생성
         echo ""
-        echo "Remote repositories:"
+        echo "💾 Creating commit..."
+        COMMIT_MSG="🚀 Update wedding-invitation image to ${{ env.SHORT_SHA }}
+
+- Updated image: ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}
+- Triggered by commit: ${{ github.sha }}
+- Author: ${{ github.actor }}
+- Workflow: ${{ github.workflow }}"
+        
+        git commit -m "${COMMIT_MSG}"
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ Commit created successfully"
+        else
+          echo "❌ Commit creation failed"
+          exit 1
+        fi
+        
+        # 리모트 정보 확인
+        echo ""
+        echo "🌐 Remote repositories:"
         git remote -v
         
-        # 푸시
+        # 푸시 시도 (여러 브랜치 시도)
         echo ""
-        echo "Pushing changes..."
-        git push origin main || git push origin master || git push
+        echo "🚀 Pushing changes..."
         
-        echo "✅ Changes pushed successfully!"
+        # 현재 브랜치를 먼저 시도
+        CURRENT_BRANCH=$(git branch --show-current)
+        echo "Trying to push to origin/${CURRENT_BRANCH}..."
+        
+        if git push origin "${CURRENT_BRANCH}"; then
+          echo "✅ Successfully pushed to origin/${CURRENT_BRANCH}"
+        elif git push origin main; then
+          echo "✅ Successfully pushed to origin/main"
+        elif git push origin master; then
+          echo "✅ Successfully pushed to origin/master"  
+        elif git push; then
+          echo "✅ Successfully pushed to default remote"
+        else
+          echo "❌ All push attempts failed!"
+          echo ""
+          echo "🔍 Debug information:"
+          echo "Remote URL: $(git remote get-url origin)"
+          echo "Current branch: ${CURRENT_BRANCH}"
+          echo "Available branches: $(git branch -r)"
+          echo ""
+          echo "Git push output:"
+          git push origin "${CURRENT_BRANCH}" 2>&1 || true
+          exit 1
+        fi
+        
+        echo ""
+        echo "🎉 Changes successfully pushed to montstrap repository!"
+        
+        # 최종 검증
+        echo ""
+        echo "🔍 Final verification:"
+        echo "Latest commit: $(git log -1 --oneline)"
+        echo "Current HEAD: $(git rev-parse HEAD)"
 
-    - name: Debug Token Information
+    - name: Debug Token and Repository Information
       if: failure()
       run: |
-        echo "--- Token Debugging Information ---"
-        echo "⚠️  If you see authentication errors, check:"
-        echo "1. PERSONAL_GITHUB_TOKEN secret is set in repository secrets"
-        echo "2. Token has 'repo' scope for private repositories"  
-        echo "3. Token has 'public_repo' scope for public repositories"
-        echo "4. Token owner has push access to ${{ env.MONTSTRAP_REPO }}"
+        echo "--- Debugging Information for Manifest Update Failure ---"
         echo ""
+        echo "🔍 Repository Information:"
+        echo "Source repo: ${{ github.repository }}"
+        echo "Target repo: ${{ env.MONTSTRAP_REPO }}"
+        echo "Target path: ${{ env.MONTSTRAP_PATH }}"
+        echo "Actor: ${{ github.actor }}"
+        echo ""
+        
+        echo "🔑 Token Requirements:"
+        echo "1. PERSONAL_GITHUB_TOKEN must be set in repository secrets"
+        echo "2. Token must have 'repo' scope (for private repos) or 'public_repo' scope (for public repos)"
+        echo "3. Token owner (${{ github.actor }}) must have WRITE access to ${{ env.MONTSTRAP_REPO }}"
+        echo "4. Token must not be expired"
+        echo ""
+        
+        echo "📁 Expected Directory Structure in montstrap repo:"
+        echo "${{ env.MONTSTRAP_REPO }}"
+        echo "└── wedding-invitation/"
+        echo "    └── manifests/"
+        echo "        └── deployment.yaml"
+        echo ""
+        
+        echo "🔧 To fix this issue:"
+        echo "1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+        echo "2. Check if PERSONAL_GITHUB_TOKEN is properly set"
+        echo "3. Generate a new token at: https://github.com/settings/tokens"
+        echo "4. Ensure token has correct scopes and hasn't expired"
+        echo "5. Verify ${{ github.actor }} has push access to ${{ env.MONTSTRAP_REPO }}"
+        echo ""
+        
+        if [ -d "montstrap" ]; then
+          echo "📂 Montstrap directory exists, checking contents:"
+          find montstrap -type f | head -20 || echo "No files found"
+        else
+          echo "❌ Montstrap directory was not checked out - this indicates a token/permission issue"
+        fi
         
     - name: Update Summary
       if: always()
