@@ -9,7 +9,8 @@
     "build:fresh": "npm run prebuild && npm run build",
     "start": "next start",
     "lint": "next lint",
-    "optimize-images": "chmod +x ./scripts/optimize-images.sh && ./scripts/optimize-images.sh"
+    "optimize-images": "chmod +x ./scripts/optimize-images.sh && ./scripts/optimize-images.sh",
+    "optimize-images-webp": "chmod +x ./scripts/optimize-images-webp.sh && ./scripts/optimize-images-webp.sh"
   },
   "dependencies": {
     "framer-motion": "^12.12.1",

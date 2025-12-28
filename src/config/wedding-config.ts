@@ -100,15 +100,15 @@ export const weddingConfig = {
     position: "bottom" as GalleryPosition, // "middle" (현재 위치) 또는 "bottom" (맨 하단) 선택
     aspectRatio: "2:3" as const, // "1:1" (정사각형), "2:3" (세로 사진), "3:2" (가로 사진), "4:3" (디지털), "16:9" (와이드)
     images: [
-      "/images/gallery/image1.jpg",
-      "/images/gallery/image2.jpg",
-      "/images/gallery/image3.jpg",
-      "/images/gallery/image4.jpg",
-      "/images/gallery/image5.jpg",
-      "/images/gallery/image6.jpg",
-      "/images/gallery/image7.jpg",
-      "/images/gallery/image8.jpg",
-      "/images/gallery/image9.jpg",
+      "/images/gallery/image1.webp",
+      "/images/gallery/image2.webp",
+      "/images/gallery/image3.webp",
+      "/images/gallery/image4.webp",
+      "/images/gallery/image5.webp",
+      "/images/gallery/image6.webp",
+      "/images/gallery/image7.webp",
+      "/images/gallery/image8.webp",
+      "/images/gallery/image9.webp",
     ],
   } as GalleryConfig,
 

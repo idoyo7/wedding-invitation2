@@ -20,7 +20,7 @@ RUN \
 
 # Rebuild the source code only when needed
 FROM base AS builder
-RUN apk add --no-cache imagemagick
+RUN apk add --no-cache imagemagick imagemagick-jpeg imagemagick-webp libjpeg-turbo-dev
 WORKDIR /app
 
 # Build arguments (빌드 시점에 전달되는 시크릿)
@@ -30,32 +30,37 @@ ENV NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=$NEXT_PUBLIC_NAVER_MAP_CLIENT_ID
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# 이미지 최적화 (원본 → 갤러리로 2MB 이하 리사이징)
-RUN echo "🖼️ 갤러리 이미지 최적화 중..." && \
+# WebP 이미지 최적화 (원본 JPG → WebP 갤러리로 변환, 원본 제거)
+RUN echo "🖼️ WebP 이미지 최적화 시작..." && \
     mkdir -p public/images/gallery && \
-    for i in $(seq 1 9); do \
-        if [ -f "public/images/original/image${i}.jpg" ]; then \
-            echo "처리 중: image${i}.jpg"; \
-            /usr/bin/convert "public/images/original/image${i}.jpg" \
-                -quality 75 \
-                -resize '1600x1600>' \
-                -strip \
-                "public/images/gallery/image${i}.jpg"; \
-            # 2MB 이하인지 확인하고, 아니면 더 압축 \
-            if [ $(stat -c%s "public/images/gallery/image${i}.jpg") -gt 2097152 ]; then \
-                /usr/bin/convert "public/images/original/image${i}.jpg" \
-                    -quality 60 \
-                    -resize '1400x1400>' \
+    if command -v convert >/dev/null 2>&1; then \
+        echo "✅ ImageMagick 발견"; \
+        for i in 1 2 3 4 5 6 7 8 9; do \
+            if [ -f "public/images/original/image${i}.jpg" ]; then \
+                echo "🔄 처리 중: image${i}.jpg → image${i}.webp"; \
+                convert "public/images/original/image${i}.jpg" \
+                    -auto-orient \
+                    -quality 85 \
+                    -resize '1920x1920>' \
                     -strip \
-                    "public/images/gallery/image${i}.jpg"; \
+                    "public/images/gallery/image${i}.webp"; \
+                if [ -f "public/images/gallery/image${i}.webp" ]; then \
+                    echo "✅ 변환 완료: image${i}.webp"; \
+                    rm -f "public/images/original/image${i}.jpg"; \
+                    echo "🗑️ 원본 제거: image${i}.jpg"; \
+                fi; \
             fi; \
+        done; \
+        # 원본 디렉토리가 비어있으면 제거 \
+        if [ -d "public/images/original" ] && [ -z "$(ls -A public/images/original)" ]; then \
+            rmdir public/images/original; \
+            echo "🗑️ 빈 원본 디렉토리 제거됨"; \
         fi; \
-    done && \
-    # 갤러리에서 사용하지 않는 이미지 제거 \
-    for i in $(seq 14 20); do \
-        rm -f "public/images/gallery/image${i}.jpg"; \
-    done && \
-    echo "✅ 이미지 최적화 완료"
+    else \
+        echo "❌ ImageMagick 없음, 원본 JPG 유지"; \
+    fi && \
+    echo "🎉 WebP 최적화 완료" && \
+    ls -lh public/images/gallery/ || echo "갤러리 디렉토리 없음"
 
 # Environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -74,7 +79,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy the public folder
+# Copy the public folder (원본 이미지는 이미 제거됨, WebP만 포함)
 COPY --from=builder /app/public ./public
 
 # Set the correct permission for prerender cache
