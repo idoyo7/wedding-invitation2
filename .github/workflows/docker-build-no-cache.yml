@@ -105,6 +105,19 @@ jobs:
         repository: ${{ env.MONTSTRAP_REPO }}
         token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         path: montstrap
+        
+    - name: Verify montstrap checkout
+      run: |
+        echo "--- Verifying montstrap repository checkout ---"
+        echo "Repository: ${{ env.MONTSTRAP_REPO }}"
+        echo "Target path: ${{ env.MONTSTRAP_PATH }}"
+        echo ""
+        echo "Checking montstrap directory structure:"
+        ls -la montstrap/ || echo "❌ montstrap directory not found"
+        echo ""
+        echo "Checking if wedding-invitation directory exists:"
+        ls -la montstrap/wedding-invitation/ || echo "❌ wedding-invitation directory not found (will be created)"
+        echo ""
 
     - name: Update deployment manifest
       id: update-manifest
@@ -148,7 +161,7 @@ jobs:
             spec:
               containers:
                 - name: wedding-invitation
-                  image: montkim9/wedding-invitation:latest
+                  image: ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}
                   ports:
                     - containerPort: 3000
         EOF
@@ -157,12 +170,16 @@ jobs:
           echo "Existing deployment.yaml found"
         fi
         
-        # 현재 이미지 태그 확인
+        # 현재 이미지 태그 확인 (디버깅 강화)
         echo "Current deployment.yaml content (image line):"
-        grep -n "image:" "${MANIFEST_FILE}" || echo "No image line found"
+        grep -n "image:" "${MANIFEST_FILE}" || echo "❌ No image line found"
+        echo ""
+        echo "Full deployment.yaml content for debugging:"
+        cat "${MANIFEST_FILE}"
         
-        # 이미지 태그 업데이트
-        sed -i "s|image: montkim9/wedding-invitation:.*|image: montkim9/wedding-invitation:${{ env.SHORT_SHA }}|" "${MANIFEST_FILE}"
+        # 이미지 태그 업데이트 (더 정확한 패턴 매칭)
+        echo "Updating image tag to: ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}"
+        sed -i "s|image: ${{ env.IMAGE_NAME }}:.*|image: ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}|g" "${MANIFEST_FILE}"
         
         # 변경사항 확인
         echo ""
@@ -183,12 +200,56 @@ jobs:
       run: |
         echo "--- Committing & Pushing Changes ---"
         cd montstrap
+        
+        # Git 설정 확인
+        echo "Setting up git configuration..."
         git config user.name "${{ github.actor }}"
         git config user.email "${{ github.actor }}@users.noreply.github.com"
+        
+        echo "Git configuration:"
+        git config --list | grep user || echo "No user config found"
+        
+        # 현재 상태 확인
+        echo ""
+        echo "Git status before add:"
+        git status
+        
+        # 변경사항 추가
+        echo ""
+        echo "Adding changes..."
         git add .
-        git commit -m "🚀 Update wedding-invitation image tag to ${{ env.SHORT_SHA }} - Updated image: montkim9/wedding-invitation:${{ env.SHORT_SHA }}, Triggered by: ${{ github.event.head_commit.message }}, Commit SHA: ${{ github.sha }}, Author: ${{ github.actor }}"
-        git push
+        
+        echo "Git status after add:"
+        git status
+        
+        # 커밋
+        echo ""
+        echo "Creating commit..."
+        git commit -m "🚀 Update wedding-invitation image tag to ${{ env.SHORT_SHA }}"
+        
+        # 리모트 확인
+        echo ""
+        echo "Remote repositories:"
+        git remote -v
+        
+        # 푸시
+        echo ""
+        echo "Pushing changes..."
+        git push origin main || git push origin master || git push
+        
+        echo "✅ Changes pushed successfully!"
 
+    - name: Debug Token Information
+      if: failure()
+      run: |
+        echo "--- Token Debugging Information ---"
+        echo "⚠️  If you see authentication errors, check:"
+        echo "1. PERSONAL_GITHUB_TOKEN secret is set in repository secrets"
+        echo "2. Token has 'repo' scope for private repositories"  
+        echo "3. Token has 'public_repo' scope for public repositories"
+        echo "4. Token owner has push access to ${{ env.MONTSTRAP_REPO }}"
+        echo ""
+        
     - name: Update Summary
       if: always()
       run: |
