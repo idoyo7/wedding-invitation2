@@ -61,14 +61,13 @@ optimize_image_webp() {
     
     echo "📊 처리 중: $filename (원본: ${file_size_mb}MB, JPG → WebP)"
     
-    # WebP 변환 (품질 85%, 메타데이터 제거, 리사이징)
-    echo "  🔧 WebP 변환: $original_file → $output_file"
+    # WebP 변환 (원본 해상도 유지, 품질로만 최적화)
+    echo "  🔧 WebP 변환 (원본 해상도 유지): $original_file → $output_file"
     
-    # 첫 번째 시도: 품질 85%
+    # 첫 번째 시도: 품질 90% (원본 해상도 유지)
     $CONVERT_PATH "$original_file" \
         -auto-orient \
-        -quality 85 \
-        -resize '1920x1920>' \
+        -quality 100 \
         -strip \
         "$output_file.tmp"
     
@@ -88,16 +87,15 @@ optimize_image_webp() {
     local new_size=$(stat -c%s "$output_file.tmp" 2>/dev/null || stat -f%z "$output_file.tmp")
     local new_size_mb=$((new_size / 1024 / 1024))
     
-    # 목표 크기 (1.5MB, WebP는 JPG보다 압축률이 좋음)
-    local target_size=$((1536 * 1024)) # 1.5MB
+    # 목표 크기 (3MB, 원본 해상도 유지 시 더 여유롭게)
+    local target_size=$((3072 * 1024)) # 3MB
     
-    # 여전히 너무 큰 경우 더 강한 압축
+    # 여전히 너무 큰 경우 더 강한 압축 (해상도 유지)
     if [ "$new_size" -gt "$target_size" ]; then
-        echo "  🔧 2차 압축 시도 (품질 75%)"
+        echo "  🔧 2차 압축 시도 (품질 80%, 해상도 유지)"
         $CONVERT_PATH "$original_file" \
             -auto-orient \
-            -quality 75 \
-            -resize '1600x1600>' \
+            -quality 90 \
             -strip \
             "$output_file.tmp"
         if [ -s "$output_file.tmp" ]; then
@@ -106,13 +104,12 @@ optimize_image_webp() {
         fi
     fi
     
-    # 그래도 큰 경우 최종 압축
+    # 그래도 큰 경우 최종 압축 (해상도 유지)
     if [ "$new_size" -gt "$target_size" ]; then
-        echo "  🔧 3차 압축 시도 (품질 65%)"
+        echo "  🔧 3차 압축 시도 (품질 70%, 해상도 유지)"
         $CONVERT_PATH "$original_file" \
             -auto-orient \
-            -quality 65 \
-            -resize '1400x1400>' \
+            -quality 80 \
             -strip \
             "$output_file.tmp"
         if [ -s "$output_file.tmp" ]; then
@@ -121,13 +118,19 @@ optimize_image_webp() {
         fi
     fi
     
-    # 최적화된 파일을 최종 위치로 이동
-    mv "$output_file.tmp" "$output_file"
-    
-    # 압축률 계산
-    local compression_ratio=$((100 - (new_size * 100 / file_size)))
-    
-    echo "✅ WebP 변환 완료: $filename (${file_size_mb}MB → ${new_size_mb}MB, ${compression_ratio}% 압축)"
+    # WebP가 원본보다 작은 경우만 사용, 그렇지 않으면 원본 JPG 유지
+    if [ "$new_size" -lt "$file_size" ]; then
+        # WebP가 더 작음 - 사용
+        mv "$output_file.tmp" "$output_file"
+        local compression_ratio=$((100 - (new_size * 100 / file_size)))
+        echo "✅ WebP 변환 완료: $filename (${file_size_mb}MB → ${new_size_mb}MB, ${compression_ratio}% 압축)"
+    else
+        # WebP가 더 큼 - 원본 JPG 사용
+        rm -f "$output_file.tmp"
+        local jpg_output="${output_file%.webp}.jpg"
+        cp "$original_file" "$jpg_output"
+        echo "⚠️  WebP가 더 큼 - 원본 JPG 유지: $filename (${file_size_mb}MB)"
+    fi
 }
 
 # 기존 JPG 파일들 제거 (WebP로 교체)

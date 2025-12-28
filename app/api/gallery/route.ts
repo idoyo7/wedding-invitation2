@@ -8,37 +8,32 @@ export async function GET() {
     // 갤러리 폴더 경로
     const galleryDir = path.join(process.cwd(), 'public/images/gallery');
     
+    // 폴더가 존재하지 않는 경우
+    if (!fs.existsSync(galleryDir)) {
+      return NextResponse.json({ images: weddingConfig.gallery.images });
+    }
+    
     // 폴더 내 파일 목록 읽기
     const files = fs.readdirSync(galleryDir);
     
-    // 이미지 파일 필터링
-    const imageFiles = files
-      .filter(file => {
-        const ext = path.extname(file).toLowerCase();
-        return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
-      });
+    // 스마트 이미지 선택: 각 번호별로 WebP 또는 JPG 중 최적 선택
+    const smartImages: string[] = [];
     
-    // config 파일에 설정된 순서로 이미지 정렬
-    const configImages = weddingConfig.gallery.images;
-    const orderedImages: string[] = [];
-    
-    // config에 설정된 순서대로 존재하는 이미지만 추가
-    for (const configImagePath of configImages) {
-      const filename = path.basename(configImagePath);
-      if (imageFiles.includes(filename)) {
-        orderedImages.push(configImagePath);
+    // image1~image9까지 확인
+    for (let i = 1; i <= 9; i++) {
+      const webpFile = `image${i}.webp`;
+      const jpgFile = `image${i}.jpg`;
+      
+      if (files.includes(webpFile)) {
+        // WebP가 존재하면 WebP 사용
+        smartImages.push(`/images/gallery/${webpFile}`);
+      } else if (files.includes(jpgFile)) {
+        // WebP가 없고 JPG가 존재하면 JPG 사용
+        smartImages.push(`/images/gallery/${jpgFile}`);
       }
     }
     
-    // config에 없지만 폴더에 존재하는 이미지들을 마지막에 추가 (파일명 순으로 정렬)
-    const remainingFiles = imageFiles
-      .filter(file => !configImages.some((configPath: string) => path.basename(configPath) === file))
-      .sort((a, b) => a.localeCompare(b))
-      .map(file => `/images/gallery/${file}`);
-    
-    const finalImages = [...orderedImages, ...remainingFiles];
-    
-    return NextResponse.json({ images: finalImages });
+    return NextResponse.json({ images: smartImages });
   } catch (error) {
     console.error('갤러리 이미지 로드 오류:', error);
     return NextResponse.json(
