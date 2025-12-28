@@ -9,95 +9,115 @@ on:
       - 'docs/**'
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # 수동 트리거 허용
+  workflow_dispatch:
 
 env:
-  # Docker Hub (기본 registry)
+  # Docker Hub
   IMAGE_NAME: montkim9/wedding-invitation
-  # montstrap 레포지토리 경로
+
+  # montstrap repo / path
   MONTSTRAP_REPO: idoyo7/montstrap
-  MONTSTRAP_PATH: montstrap/wedding-invitation/manifests/deployment.yaml
+  MONTSTRAP_DIR: wedding-invitation/manifests
+  MONTSTRAP_FILE: deployment.yaml
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     environment: production
     permissions:
-      contents: write # montstrap 레포지토리에 푸시하기 위해 필요
+      contents: read
       packages: write
 
+    outputs:
+      short_sha: ${{ steps.vars.outputs.short_sha }}
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Extract short SHA
+        id: vars
+        run: |
+          SHORT_SHA="${GITHUB_SHA::6}"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${{ env.IMAGE_NAME }}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
-    - name: Extract short SHA
-      id: vars
-      run: echo "SHORT_SHA=${GITHUB_SHA:0:6}" >> $GITHUB_ENV
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Log in to Docker Hub
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build and push Docker image
-      if: github.event_name != 'pull_request'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        platforms: linux/amd64
-        push: true
-        build-args: |
-          NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${{ secrets.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID }}
-        tags: |
-          ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}
-          ${{ env.IMAGE_NAME }}:latest
-        
-    - name: Build Docker image (Pull Request)
-      if: github.event_name == 'pull_request'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        platforms: linux/amd64
-        push: false
-        build-args: |
-          NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=test_key_for_pr
+      # Push 되는 케이스 (push to main/master or workflow_dispatch 등)
+      - name: Build and push Docker image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          # cache 끄고 싶으면 아래 두 줄 추가
+          # no-cache: true
+          # pull: true
+          build-args: |
+            NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${{ secrets.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.short_sha }}
+            ${{ env.IMAGE_NAME }}:latest
 
-    - name: Build Summary
-      if: always() # 항상 실행
-      run: |
-        echo "### 📦 Wedding Invitation Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        if [ "${{ github.event_name }}" != "pull_request" ]; then
-          echo "${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+      # PR은 push 없이 build만
+      - name: Build Docker image (Pull Request)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          build-args: |
+            NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=test_key_for_pr
+          tags: |
+            ${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "### 📦 Wedding Invitation Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Event:** \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Ref:** \`${{ github.ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**SHA:** \`${{ steps.vars.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** \`linux/amd64\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.short_sha }}" >> $GITHUB_STEP_SUMMARY
             echo "${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
           fi
-        else
-          echo "${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Registry:** \`Docker Hub\`" >> $GITHUB_STEP_SUMMARY
-        echo "**Repository:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "**SHA:** \`${{ env.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "**Platform:** \`linux/amd64\`" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-  # montstrap 매니페스트 업데이트
   update-manifests:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    name: Update montstrap deployment manifest
     needs: build-and-push
     runs-on: ubuntu-latest
+
+    # main/master push에서만 실행
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
     permissions:
       contents: write
-    
+
+    env:
+      SHORT_SHA: ${{ needs.build-and-push.outputs.short_sha }}
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+
     steps:
     - name: Checkout montstrap repository
       uses: actions/checkout@v4
@@ -106,121 +126,155 @@ jobs:
         token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         path: montstrap
 
-    - name: Update deployment manifest
-      id: update-manifest
+    - name: Verify montstrap checkout
       run: |
-        echo "🚀 Updating deployment manifest..."
-        cd montstrap
-        
-        MANIFEST_DIR="wedding-invitation/manifests"
-        MANIFEST_FILE="${MANIFEST_DIR}/deployment.yaml"
-        NEW_IMAGE="${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}"
-        
-        echo "Target: ${MANIFEST_FILE}"
-        echo "New image: ${NEW_IMAGE}"
-        
-        # 디렉토리 생성
-        mkdir -p "${MANIFEST_DIR}"
-        
-        # deployment.yaml 생성 또는 업데이트
-        if [ ! -f "${MANIFEST_FILE}" ]; then
-          echo "Creating new deployment.yaml..."
-          echo "apiVersion: apps/v1" > "${MANIFEST_FILE}"
-          echo "kind: Deployment" >> "${MANIFEST_FILE}"
-          echo "metadata:" >> "${MANIFEST_FILE}"
-          echo "  name: wedding-invitation" >> "${MANIFEST_FILE}"
-          echo "  namespace: wedding-invitation" >> "${MANIFEST_FILE}"
-          echo "  labels:" >> "${MANIFEST_FILE}"
-          echo "    app: wedding-invitation" >> "${MANIFEST_FILE}"
-          echo "spec:" >> "${MANIFEST_FILE}"
-          echo "  replicas: 2" >> "${MANIFEST_FILE}"
-          echo "  selector:" >> "${MANIFEST_FILE}"
-          echo "    matchLabels:" >> "${MANIFEST_FILE}"
-          echo "      app: wedding-invitation" >> "${MANIFEST_FILE}"
-          echo "  template:" >> "${MANIFEST_FILE}"
-          echo "    metadata:" >> "${MANIFEST_FILE}"
-          echo "      labels:" >> "${MANIFEST_FILE}"
-          echo "        app: wedding-invitation" >> "${MANIFEST_FILE}"
-          echo "    spec:" >> "${MANIFEST_FILE}"
-          echo "      containers:" >> "${MANIFEST_FILE}"
-          echo "        - name: wedding-invitation" >> "${MANIFEST_FILE}"
-          echo "          image: ${NEW_IMAGE}" >> "${MANIFEST_FILE}"
-          echo "          ports:" >> "${MANIFEST_FILE}"
-          echo "            - containerPort: 3000" >> "${MANIFEST_FILE}"
-          echo "✅ Created new deployment.yaml"
-        else
-          echo "Updating existing deployment.yaml..."
-          sed -i "s|image: montkim9/wedding-invitation:.*|image: ${NEW_IMAGE}|g" "${MANIFEST_FILE}"
-          echo "✅ Updated existing deployment.yaml"
-        fi
-        
-        echo "📋 Final deployment.yaml:"
-        cat "${MANIFEST_FILE}"
-        
-        # Git 변경사항 확인
-        git add "${MANIFEST_FILE}"
-        if git diff --cached --quiet; then
-          echo "changes_made=false" >> $GITHUB_OUTPUT
-        else
-          echo "changes_made=true" >> $GITHUB_OUTPUT
-        fi
+        echo "--- Verifying montstrap repository checkout ---"
+        echo "Repository: ${{ env.MONTSTRAP_REPO }}"
+        echo "SHORT_SHA: ${SHORT_SHA}"
+        echo "IMAGE_TAG: ${IMAGE_TAG}"
+        echo ""
+        ls -la montstrap/
 
-    - name: Commit and push changes
-      if: steps.update-manifest.outputs.changes_made == 'true'
+    - name: Ensure manifest exists
+      id: ensure
       run: |
-        echo "💾 Committing changes..."
-        cd montstrap
-        
-        git config user.name "${{ github.actor }}"
-        git config user.email "${{ github.actor }}@users.noreply.github.com"
-        
-        git commit -m "🚀 Update wedding-invitation image to ${{ env.SHORT_SHA }}"
-        
-        echo "🚀 Pushing to repository..."
-        git push
-        
+          set -euo pipefail
+          cd montstrap
+
+          MANIFEST_DIR="${{ env.MONTSTRAP_DIR }}"
+          MANIFEST_FILE="${MANIFEST_DIR}/${{ env.MONTSTRAP_FILE }}"
+
+          mkdir -p "${MANIFEST_DIR}"
+
+          if [ ! -f "${MANIFEST_FILE}" ]; then
+            echo "Manifest not found. Creating: ${MANIFEST_FILE}"
+            echo "apiVersion: apps/v1" > "${MANIFEST_FILE}"
+            echo "kind: Deployment" >> "${MANIFEST_FILE}"
+            echo "metadata:" >> "${MANIFEST_FILE}"
+            echo "  name: wedding-invitation" >> "${MANIFEST_FILE}"
+            echo "  namespace: wedding-invitation" >> "${MANIFEST_FILE}"
+            echo "  labels:" >> "${MANIFEST_FILE}"
+            echo "    app: wedding-invitation" >> "${MANIFEST_FILE}"
+            echo "spec:" >> "${MANIFEST_FILE}"
+            echo "  replicas: 2" >> "${MANIFEST_FILE}"
+            echo "  revisionHistoryLimit: 2" >> "${MANIFEST_FILE}"
+            echo "  selector:" >> "${MANIFEST_FILE}"
+            echo "    matchLabels:" >> "${MANIFEST_FILE}"
+            echo "      app: wedding-invitation" >> "${MANIFEST_FILE}"
+            echo "  template:" >> "${MANIFEST_FILE}"
+            echo "    metadata:" >> "${MANIFEST_FILE}"
+            echo "      labels:" >> "${MANIFEST_FILE}"
+            echo "        app: wedding-invitation" >> "${MANIFEST_FILE}"
+            echo "    spec:" >> "${MANIFEST_FILE}"
+            echo "      containers:" >> "${MANIFEST_FILE}"
+            echo "        - name: wedding-invitation" >> "${MANIFEST_FILE}"
+            echo "          image: ${IMAGE_TAG}" >> "${MANIFEST_FILE}"
+            echo "          ports:" >> "${MANIFEST_FILE}"
+            echo "            - containerPort: 3000" >> "${MANIFEST_FILE}"
+          fi
+
+          echo "manifest_file=${MANIFEST_FILE}" >> "$GITHUB_OUTPUT"
+          echo "--- Current image lines ---"
+          grep -n "image:" "${MANIFEST_FILE}" || true
+
+    - name: Update image tag in manifest
+      id: update
+      run: |
+          set -euo pipefail
+          cd montstrap
+
+          MANIFEST_FILE="${{ steps.ensure.outputs.manifest_file }}"
+
+          echo "--- Before ---"
+          grep -n "image:" "${MANIFEST_FILE}" || true
+
+          # 공백/들여쓰기 포함해 image 라인을 안전하게 교체
+          # 1) image: <IMAGE_NAME>:<anything> 형태가 있으면 교체
+          if grep -Eq "^[[:space:]]*image:[[:space:]]*${{ env.IMAGE_NAME }}:" "${MANIFEST_FILE}"; then
+            sed -i -E "s|(^[[:space:]]*image:[[:space:]]*)${{ env.IMAGE_NAME }}:.*|\1${IMAGE_TAG}|g" "${MANIFEST_FILE}"
+          else
+            # 2) image: 라인이 아예 없거나 다른 이미지면, 첫 번째 컨테이너 블록 아래에 넣고 싶다면 로직 추가 가능
+            #    여기서는 "image:" 라인이 있으면 그걸 교체(이미지명이 다르면 바꾸지 않음)하고,
+            #    없으면 실패로 처리해서 눈에 띄게 함.
+            echo "❌ No matching image line for ${{ env.IMAGE_NAME }} found in ${MANIFEST_FILE}"
+            echo "Please ensure the manifest contains an image line for ${{ env.IMAGE_NAME }}."
+            echo "--- Full manifest ---"
+            cat "${MANIFEST_FILE}"
+            exit 1
+          fi
+
+          echo "--- After ---"
+          grep -n "image:" "${MANIFEST_FILE}" || true
+
+          # 변경 여부 체크
+          if git diff --exit-code --quiet "${MANIFEST_FILE}"; then
+            echo "changes_made=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected."
+          else
+            echo "changes_made=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected."
+          fi
+
+    - name: Commit and push changes to montstrap
+      if: steps.update.outputs.changes_made == 'true'
+      run: |
+          set -euo pipefail
+          cd montstrap
+
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+          git status
+          git add "${{ steps.ensure.outputs.manifest_file }}"
+          git commit -m "🚀 Update wedding-invitation image tag to ${SHORT_SHA}"
+
+          # main/master 어느 브랜치인지 자동으로 맞춰 푸시
+          BRANCH="${GITHUB_REF_NAME}"
+          echo "Pushing to branch: ${BRANCH}"
+          git push origin "${BRANCH}"
+
     - name: Update Summary
       if: always()
       run: |
-        echo "### 🚀 Deployment Manifest Update Status" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        if [ "${{ steps.update-manifest.outputs.changes_made }}" == "true" ]; then
-          echo "✅ **Successfully updated** \`${{ env.MONTSTRAP_PATH }}\` with image tag \`${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}\`." >> $GITHUB_STEP_SUMMARY
-          echo "The changes have been committed and pushed to \`${{ env.MONTSTRAP_REPO }}\`." >> $GITHUB_STEP_SUMMARY
-        else
-          echo "ℹ️ No changes were needed for \`${{ env.MONTSTRAP_PATH }}\`." >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Deployment Manifest Update Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Repo:** \`${{ env.MONTSTRAP_REPO }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**File:** \`${{ env.MONTSTRAP_DIR }}/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** \`${IMAGE_TAG}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.update.outputs.changes_made || 'false' }}" = "true" ]; then
+            echo "✅ Updated and pushed successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No changes were needed (or update step did not run)." >> $GITHUB_STEP_SUMMARY
+          fi
 
-  # 배포 준비 완료 알림
   deploy-ready:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     needs: [build-and-push, update-manifests]
     runs-on: ubuntu-latest
-    
     steps:
     - name: Deploy notification
       run: |
-        echo "### 🎉 Wedding Invitation - Deployment Ready" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "The Docker image has been built and pushed to the registry, and the deployment manifest has been updated." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Image Tag:** \`${{ env.IMAGE_NAME }}:latest\` (or \`${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}\`)" >> $GITHUB_STEP_SUMMARY
-        echo "**Manifest Updated:** \`${{ env.MONTSTRAP_REPO }}/${{ env.MONTSTRAP_PATH }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+          SHORT_SHA="${{ needs.build-and-push.outputs.short_sha }}"
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
 
-  # 실패 알림
+          echo "### 🎉 Wedding Invitation - Deployment Ready" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Docker image built/pushed and manifest updated." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** \`${IMAGE_TAG}\` (and \`${{ env.IMAGE_NAME }}:latest\`)" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifest:** \`${{ env.MONTSTRAP_REPO }}/${{ env.MONTSTRAP_DIR }}/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**SHA:** \`${SHORT_SHA}\`" >> $GITHUB_STEP_SUMMARY
+
   failure-notification:
     if: failure()
     needs: [build-and-push, update-manifests]
     runs-on: ubuntu-latest
     steps:
-      - name: Send Failure Notification
-        run: |
+    - name: Send Failure Notification
+      run: |
           echo "### ❌ CI/CD Pipeline Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The Wedding Invitation CI/CD pipeline has failed." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${GITHUB_SHA:0:8}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${GITHUB_SHA::8}\`" >> $GITHUB_STEP_SUMMARY
