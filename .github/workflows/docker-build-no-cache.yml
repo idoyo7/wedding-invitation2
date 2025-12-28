@@ -30,7 +30,9 @@ jobs:
 
     outputs:
       short_sha: ${{ steps.vars.outputs.short_sha }}
-      image_tag: ${{ steps.vars.outputs.image_tag }}
+      # NOTE: image_tag output sometimes resolves empty in downstream jobs.
+      # Derive it from short_sha to make it deterministic.
+      image_tag: ${{ format('montkim9/wedding-invitation:{0}', steps.vars.outputs.short_sha) }}
 
     steps:
       - name: Checkout code
@@ -58,6 +60,11 @@ jobs:
           echo "✅ Computed SHORT_SHA=${SHORT_SHA}"
           echo "✅ Computed IMAGE_TAG=${IMAGE_TAG}"
 
+      - name: Debug step outputs
+        run: |
+          echo "steps.vars.outputs.short_sha='${{ steps.vars.outputs.short_sha }}'"
+          echo "steps.vars.outputs.image_tag='${{ steps.vars.outputs.image_tag }}'"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -82,7 +89,7 @@ jobs:
           build-args: |
             NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=${{ secrets.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID }}
           tags: |
-            ${{ steps.vars.outputs.image_tag }}
+            ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.short_sha }}
             ${{ env.IMAGE_NAME }}:latest
 
       # PR은 push 없이 build만
@@ -131,7 +138,8 @@ jobs:
 
     env:
       SHORT_SHA: ${{ needs.build-and-push.outputs.short_sha }}
-      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+      # Don't rely on needs.*.outputs.image_tag (it may be empty); compute from SHORT_SHA.
+      IMAGE_TAG: ${{ format('montkim9/wedding-invitation:{0}', needs.build-and-push.outputs.short_sha) }}
 
     steps:
       - name: Validate computed image tag (fail fast)
