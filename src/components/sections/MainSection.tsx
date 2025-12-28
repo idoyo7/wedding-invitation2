@@ -2,24 +2,26 @@
 
 import React from 'react';
 import styled from 'styled-components';
-import Image from 'next/image';
 import { weddingConfig } from '../../config/wedding-config';
 
 const watermarkId = weddingConfig.meta._jwk_watermark_id || 'JWK-NonCommercial';
 
 const MainSection = () => {
+  const jpgSrc = weddingConfig.main.image;
+  const webpSrc = jpgSrc.endsWith('.jpg') ? jpgSrc.replace(/\.jpg$/i, '.webp') : jpgSrc;
+
   return (
     <MainSectionContainer className={`wedding-container jwk-${watermarkId.slice(0, 8)}-main`}>
       {}
-      <BackgroundImage 
-        src={weddingConfig.main.image}
-        alt="웨딩 배경 이미지"
-        fill
-        priority
-        sizes="100vw"
-        quality={90}
-        style={{ objectFit: 'cover', objectPosition: 'center 10%' }}
-      />
+      <BackgroundPicture aria-hidden="true">
+        <source srcSet={webpSrc} type="image/webp" />
+        <BackgroundImg
+          src={jpgSrc}
+          alt="웨딩 배경 이미지"
+          loading="eager"
+          fetchPriority="high"
+        />
+      </BackgroundPicture>
       <Overlay />
       <MainContent>
         <MainTitle>{weddingConfig.main.title}</MainTitle>
@@ -63,8 +65,17 @@ const MainSectionContainer = styled.section`
   }
 `;
 
-const BackgroundImage = styled(Image)`
+const BackgroundPicture = styled.picture`
+  position: absolute;
+  inset: 0;
   z-index: 0;
+`;
+
+const BackgroundImg = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 10%;
 `;
 
 const Overlay = styled.div`

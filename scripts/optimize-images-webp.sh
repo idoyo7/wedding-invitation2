@@ -205,3 +205,26 @@ echo "   - 평균 25-35% 더 작은 파일 크기"
 echo "   - 동일한 시각적 품질"
 echo "   - 모던 브라우저에서 완전 지원"
 echo "   - 더 빠른 로딩 속도"
+
+echo ""
+echo "🖼️  메인(히어로) 이미지 WebP 생성: ha0h-1fsi-bqt3.jpg → .webp (리사이즈)"
+HERO_JPG="$PROJECT_ROOT/public/images/ha0h-1fsi-bqt3.jpg"
+HERO_WEBP="$PROJECT_ROOT/public/images/ha0h-1fsi-bqt3.webp"
+if [ -f "$HERO_JPG" ]; then
+    $CONVERT_PATH "$HERO_JPG" \
+        -auto-orient \
+        -quality 95 \
+        -strip \
+        "$HERO_WEBP.tmp"
+
+    if [ -f "$HERO_WEBP.tmp" ] && [ -s "$HERO_WEBP.tmp" ]; then
+        mv "$HERO_WEBP.tmp" "$HERO_WEBP"
+        echo "✅ 생성됨: $HERO_WEBP"
+        ls -lh "$HERO_WEBP" || true
+    else
+        rm -f "$HERO_WEBP.tmp"
+        echo "⚠️  WebP 생성 실패(빈 파일). JPG 유지"
+    fi
+else
+    echo "ℹ️  히어로 JPG 없음: $HERO_JPG"
+fi
