@@ -5,6 +5,7 @@ export interface AccountInfo {
 }
 
 export interface WeddingAccountConfig {
+  enabled?: boolean;
   groom: AccountInfo;
   bride: AccountInfo;
   groomFather: AccountInfo;

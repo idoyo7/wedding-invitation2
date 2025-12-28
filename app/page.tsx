@@ -29,6 +29,7 @@ export default function Home() {
   // 갤러리 위치 설정
   const galleryPosition = weddingConfig.gallery.position || 'middle';
   const showRsvp = weddingConfig.rsvp?.enabled ?? true;
+  const showAccount = weddingConfig.account?.enabled ?? false;
 
   // 실제 렌더링되는 섹션들의 순서를 계산하여 색상 인덱스 결정
   const sectionColorMap = useMemo(() => {
@@ -47,7 +48,9 @@ export default function Home() {
       sections.push('rsvp'); // RsvpSection
     }
     
-    sections.push('account'); // AccountSection
+    if (showAccount) {
+      sections.push('account'); // AccountSection
+    }
     
     if (galleryPosition === 'bottom') {
       sections.push('gallery-bottom'); // GallerySection (bottom)
@@ -60,7 +63,7 @@ export default function Home() {
     });
     
     return colorMap;
-  }, [galleryPosition, showRsvp]);
+  }, [galleryPosition, showRsvp, showAccount]);
 
   return (
     <main>
@@ -70,7 +73,7 @@ export default function Home() {
       <VenueSection bgColor={sectionColorMap['venue']} />
       {galleryPosition === 'middle' && <GallerySection bgColor={sectionColorMap['gallery-middle']} />}
       {showRsvp && <RsvpSection bgColor={sectionColorMap['rsvp']} />}
-      <AccountSection bgColor={sectionColorMap['account']} />
+      {showAccount && <AccountSection bgColor={sectionColorMap['account']} />}
       {galleryPosition === 'bottom' && <GallerySection bgColor={sectionColorMap['gallery-bottom']} />}
       <Footer />
     </main>
