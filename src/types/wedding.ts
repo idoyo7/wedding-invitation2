@@ -42,6 +42,6 @@ export interface Venue {
     bus: string;
   };
   parking: string;
-  groomShuttle?: ShuttleInfo;
-  brideShuttle?: ShuttleInfo;
+  groomShuttle?: ShuttleInfo | null;
+  brideShuttle?: ShuttleInfo | null;
 } 

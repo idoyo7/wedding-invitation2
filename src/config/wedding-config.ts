@@ -62,6 +62,23 @@ export const weddingConfig = {
       bus: "간선\n 146, 362, 401\n지선\n 3412, 4412",
     },
     parking: "학교 내 주차장 이용 가능",
+    // 배차 안내 비활성화 (빈 문자열로 설정하여 UI에서 표시되지 않도록 함)
+    groomShuttle: {
+      location: "",
+      departureTime: "",
+      contact: {
+        name: "",
+        tel: ""
+      }
+    },
+    brideShuttle: {
+      location: "",
+      departureTime: "",
+      contact: {
+        name: "",
+        tel: ""
+      }
+    }
   },
 
   // 갤러리
