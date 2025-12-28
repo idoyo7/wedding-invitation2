@@ -35,7 +35,7 @@ jobs:
 
     - name: Extract short SHA
       id: vars
-      run: echo "SHORT_SHA=${GITHUB_SHA::6}" >> $GITHUB_ENV
+      run: echo "SHORT_SHA=${GITHUB_SHA:0:6}" >> $GITHUB_ENV
 
     - name: Log in to Docker Hub
       if: github.event_name != 'pull_request'
@@ -233,4 +233,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha::8 }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${GITHUB_SHA:0:8}\`" >> $GITHUB_STEP_SUMMARY
