@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>네이버 지도 API 키 테스트</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>네이버 지도 API 키 테스트</h1>
+    <div id="result"></div>
+    <div id="map" style="width:100%;height:400px;"></div>
+
+    <script>
+        // 여기에 실제 API 키를 입력하세요
+        const CLIENT_ID = 'yjzn15q1u4';
+        
+        function testAPI() {
+            const script = document.createElement('script');
+            script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}`;
+            
+            script.onload = function() {
+                document.getElementById('result').innerHTML = 
+                    '<p style="color: green;">✅ API 키가 정상적으로 작동합니다!</p>';
+                
+                // 지도 초기화
+                const map = new naver.maps.Map('map', {
+                    center: new naver.maps.LatLng(37.5666805, 126.9784147),
+                    zoom: 10
+                });
+            };
+            
+            script.onerror = function(error) {
+                document.getElementById('result').innerHTML = 
+                    `<p style="color: red;">❌ API 키 오류: ${error}</p>
+                     <p>확인사항:</p>
+                     <ul>
+                         <li>네이버 클라우드 플랫폼에서 Maps API 서비스가 활성화되어 있는지</li>
+                         <li>웹 서비스 URL에 현재 도메인이 등록되어 있는지</li>
+                         <li>API 키가 올바른지</li>
+                         <li>할당량이 남아있는지</li>
+                     </ul>`;
+            };
+            
+            document.head.appendChild(script);
+        }
+        
+        // 페이지 로드 후 테스트 실행
+        window.onload = testAPI;
+    </script>
+</body>
+</html>

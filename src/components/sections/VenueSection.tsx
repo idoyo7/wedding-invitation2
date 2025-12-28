@@ -45,8 +45,14 @@ const VenueSection = ({ bgColor = 'white' }: VenueSectionProps) => {
   // 디버깅 정보 출력
   useEffect(() => {
     const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID || '';
-    const debug = `클라이언트 ID: ${clientId.substring(0, 3)}...`;
+    const debug = `
+      클라이언트 ID: ${clientId ? clientId.substring(0, 8) + '...' : '❌ 없음'}
+      전체 길이: ${clientId.length}
+      NODE_ENV: ${process.env.NODE_ENV}
+      스크립트 URL: https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}
+    `;
     setDebugInfo(debug);
+    console.log('🗺️ 네이버 지도 API 디버그:', debug);
   }, []);
   
   // 네이버 지도 API 스크립트 동적 로드
@@ -60,13 +66,26 @@ const VenueSection = ({ bgColor = 'white' }: VenueSectionProps) => {
       const script = document.createElement('script');
       script.async = true;
       // 네이버 지도 API는 geocoder를 별도로 로드해야 합니다
-      script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID}`;
+      const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID;
+      
+      if (!clientId) {
+        console.error('❌ NEXT_PUBLIC_NAVER_MAP_CLIENT_ID가 설정되지 않았습니다');
+        setMapError(true);
+        return;
+      }
+      
+      script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}`;
+      
       script.onload = () => {
-        console.log('네이버 지도 스크립트 로드 완료');
+        console.log('✅ 네이버 지도 스크립트 로드 완료');
+        console.log('🔑 사용된 클라이언트 ID:', clientId.substring(0, 8) + '...');
         setMapLoaded(true);
       };
+      
       script.onerror = (error) => {
-        console.error('네이버 지도 스크립트 로드 실패:', error);
+        console.error('❌ 네이버 지도 스크립트 로드 실패:', error);
+        console.error('🌐 요청 URL:', script.src);
+        console.error('🔑 클라이언트 ID:', clientId);
         setMapError(true);
       };
       document.head.appendChild(script);

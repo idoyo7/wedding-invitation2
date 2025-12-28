@@ -44,8 +44,10 @@ jobs:
     - name: Build and push Docker image
       if: github.event_name != 'pull_request'
       run: |
-        # Build and push with SHA tag
-        docker build -t "${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}" .
+        # Build and push with SHA tag (Secrets를 build argument로 전달)
+        docker build \
+          --build-arg NEXT_PUBLIC_NAVER_MAP_CLIENT_ID="${{ secrets.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID }}" \
+          -t "${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}" .
         docker push "${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}"
         
         # Also push as latest if main branch

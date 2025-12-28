@@ -21,6 +21,7 @@ const nextConfig = {
   // 환경 변수 설정
   env: {
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+    NEXT_PUBLIC_NAVER_MAP_CLIENT_ID: process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID,
   },
   
   // 캐시 정책을 더 스마트하게 설정

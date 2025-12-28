@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wedding-invitation
+  namespace: wedding-invitation
+  labels:
+    app: wedding-invitation
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: wedding-invitation
+  template:
+    metadata:
+      labels:
+        app: wedding-invitation
+    spec:
+      containers:
+        - name: wedding-invitation
+          image: montkim9/wedding-invitation:latest
+          ports:
+            - containerPort: 3000
+          env:
+            # 런타임 환경 변수 (이미 빌드된 이미지에 주입)
+            # 주의: NEXT_PUBLIC_ 환경 변수는 빌드 시점에 필요하므로 
+            # 여기서 주입해도 효과가 없을 수 있음
+            - name: NEXT_PUBLIC_NAVER_MAP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: wedding-invitation-secrets
+                  key: naver-map-client-id
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi" 
+              cpu: "500m"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wedding-invitation-secrets
+  namespace: wedding-invitation
+type: Opaque
+data:
+  # base64로 인코딩된 값 (예시)
+  # echo -n "yjzn15q1u4" | base64
+  naver-map-client-id: eWp6bjE1cTF1NA==
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wedding-invitation-service
+  namespace: wedding-invitation
+spec:
+  selector:
+    app: wedding-invitation
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: ClusterIP

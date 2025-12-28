@@ -17,6 +17,11 @@ RUN \
 FROM base AS builder
 RUN apk add --no-cache imagemagick
 WORKDIR /app
+
+# Build arguments (빌드 시점에 전달되는 시크릿)
+ARG NEXT_PUBLIC_NAVER_MAP_CLIENT_ID
+ENV NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=$NEXT_PUBLIC_NAVER_MAP_CLIENT_ID
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
