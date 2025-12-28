@@ -28,32 +28,45 @@ ENV NEXT_PUBLIC_NAVER_MAP_CLIENT_ID=$NEXT_PUBLIC_NAVER_MAP_CLIENT_ID
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# WebP 이미지 최적화 (원본 JPG → WebP 갤러리로 변환, 원본 제거)
+# WebP 이미지 최적화 (원본 JPG → WebP 갤러리(full+thumb)로 변환, 원본 제거)
 RUN echo "🖼️ WebP 이미지 최적화 시작..." && \
-    mkdir -p public/images/gallery && \
+    mkdir -p public/images/gallery public/images/gallery/thumbs && \
     if command -v convert >/dev/null 2>&1; then \
         echo "✅ ImageMagick 발견"; \
         for i in 1 2 3 4 5 6 7 8 9; do \
             if [ -f "public/images/original/image${i}.jpg" ]; then \
-                echo "🔄 처리 중: image${i}.jpg → image${i}.webp (원본 해상도 유지)"; \
+                echo "🔄 처리 중(full): image${i}.jpg → image${i}.webp (max 1920px)"; \
                 convert "public/images/original/image${i}.jpg" \
                     -auto-orient \
-                    -quality 90 \
+                    -resize '1920x1920>' \
+                    -quality 82 \
+                    -define webp:method=6 \
                     -strip \
                     "public/images/gallery/image${i}.webp.tmp"; \
-                # WebP가 원본보다 작은 경우만 사용 \
-                orig_size=$(stat -c%s "public/images/original/image${i}.jpg" 2>/dev/null || echo 0); \
-                webp_size=$(stat -c%s "public/images/gallery/image${i}.webp.tmp" 2>/dev/null || echo 0); \
-                if [ "$webp_size" -gt 0 ] && [ "$webp_size" -lt "$orig_size" ]; then \
+                if [ -s "public/images/gallery/image${i}.webp.tmp" ]; then \
                     mv "public/images/gallery/image${i}.webp.tmp" "public/images/gallery/image${i}.webp"; \
-                    rm -f "public/images/original/image${i}.jpg"; \
-                    echo "✅ WebP 사용: image${i} (압축됨, 원본 제거)"; \
+                    echo "✅ WebP(full) 생성됨: image${i}"; \
                 else \
                     rm -f "public/images/gallery/image${i}.webp.tmp"; \
                     cp "public/images/original/image${i}.jpg" "public/images/gallery/image${i}.jpg"; \
-                    rm -f "public/images/original/image${i}.jpg"; \
-                    echo "⚠️ JPG 유지: image${i} (WebP가 더 큼, 원본 제거)"; \
+                    echo "⚠️ WebP(full) 실패 - JPG 유지: image${i}"; \
                 fi; \
+                echo "🔄 처리 중(thumb): image${i}.jpg → thumbs/image${i}.webp (max 600px)"; \
+                convert "public/images/original/image${i}.jpg" \
+                    -auto-orient \
+                    -resize '600x600>' \
+                    -quality 70 \
+                    -define webp:method=6 \
+                    -strip \
+                    "public/images/gallery/thumbs/image${i}.webp.tmp"; \
+                if [ -s "public/images/gallery/thumbs/image${i}.webp.tmp" ]; then \
+                    mv "public/images/gallery/thumbs/image${i}.webp.tmp" "public/images/gallery/thumbs/image${i}.webp"; \
+                    echo "✅ WebP(thumb) 생성됨: image${i}"; \
+                else \
+                    rm -f "public/images/gallery/thumbs/image${i}.webp.tmp"; \
+                    echo "⚠️ WebP(thumb) 실패: image${i}"; \
+                fi; \
+                rm -f "public/images/original/image${i}.jpg"; \
             fi; \
         done; \
         # 원본 디렉토리가 비어있으면 제거 \
@@ -82,7 +95,8 @@ RUN echo "🖼️ WebP 이미지 최적화 시작..." && \
         echo "ℹ️ Hero JPG 없음 또는 ImageMagick 없음. 스킵"; \
     fi && \
     echo "🎉 WebP 최적화 완료" && \
-    ls -lh public/images/gallery/ || echo "갤러리 디렉토리 없음"
+    ls -lh public/images/gallery/ || echo "갤러리 디렉토리 없음" && \
+    ls -lh public/images/gallery/thumbs/ || echo "갤러리 썸네일 디렉토리 없음"
 
 # Environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1

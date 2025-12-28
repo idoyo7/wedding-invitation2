@@ -8,13 +8,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ORIGINAL_DIR="$PROJECT_ROOT/public/images/original"
 GALLERY_DIR="$PROJECT_ROOT/public/images/gallery"
+THUMBS_DIR="$GALLERY_DIR/thumbs"
 
 echo "🖼️  WebP 갤러리 이미지 최적화 시작..."
 echo "📂 원본 디렉토리: $ORIGINAL_DIR"
 echo "📂 출력 디렉토리: $GALLERY_DIR"
+echo "📂 썸네일 디렉토리: $THUMBS_DIR"
 
 # 갤러리 디렉토리 생성
 mkdir -p "$GALLERY_DIR"
+mkdir -p "$THUMBS_DIR"
 
 # ImageMagick 설치 및 WebP 지원 확인
 CONVERT_PATH=""
@@ -47,6 +50,7 @@ optimize_image_webp() {
     local image_num="$1"
     local original_file="$ORIGINAL_DIR/image${image_num}.jpg"
     local output_file="$GALLERY_DIR/image${image_num}.webp"
+    local thumb_file="$THUMBS_DIR/image${image_num}.webp"
     local filename="image${image_num}"
     
     # 원본 파일 존재 확인
@@ -61,13 +65,13 @@ optimize_image_webp() {
     
     echo "📊 처리 중: $filename (원본: ${file_size_mb}MB, JPG → WebP)"
     
-    # WebP 변환 (원본 해상도 유지, 품질로만 최적화)
-    echo "  🔧 WebP 변환 (원본 해상도 유지): $original_file → $output_file"
-    
-    # 첫 번째 시도: 품질 90% (원본 해상도 유지)
+    # WebP 변환 (full: 최대 1920px로 리사이즈하여 디코딩 비용/용량 절감)
+    echo "  🔧 WebP(full) 생성 (max 1920px): $original_file → $output_file"
     $CONVERT_PATH "$original_file" \
         -auto-orient \
-        -quality 90 \
+        -resize '1920x1920>' \
+        -quality 82 \
+        -define webp:method=6 \
         -strip \
         "$output_file.tmp"
     
@@ -87,15 +91,17 @@ optimize_image_webp() {
     local new_size=$(stat -c%s "$output_file.tmp" 2>/dev/null || stat -f%z "$output_file.tmp")
     local new_size_mb=$((new_size / 1024 / 1024))
     
-    # 목표 크기 (3MB, 원본 해상도 유지 시 더 여유롭게)
-    local target_size=$((3072 * 1024)) # 3MB
+    # 목표 크기 (2MB)
+    local target_size=$((2048 * 1024)) # 2MB
     
-    # 여전히 너무 큰 경우 더 강한 압축 (해상도 유지)
+    # 여전히 너무 큰 경우 더 강한 압축
     if [ "$new_size" -gt "$target_size" ]; then
-        echo "  🔧 2차 압축 시도 (품질 80%, 해상도 유지)"
+        echo "  🔧 2차 압축 시도 (품질 75%, max 1920px)"
         $CONVERT_PATH "$original_file" \
             -auto-orient \
-            -quality 80 \
+            -resize '1920x1920>' \
+            -quality 75 \
+            -define webp:method=6 \
             -strip \
             "$output_file.tmp"
         if [ -s "$output_file.tmp" ]; then
@@ -104,12 +110,14 @@ optimize_image_webp() {
         fi
     fi
     
-    # 그래도 큰 경우 최종 압축 (해상도 유지)
+    # 그래도 큰 경우 최종 압축
     if [ "$new_size" -gt "$target_size" ]; then
-        echo "  🔧 3차 압축 시도 (품질 70%, 해상도 유지)"
+        echo "  🔧 3차 압축 시도 (품질 68%, max 1600px)"
         $CONVERT_PATH "$original_file" \
             -auto-orient \
-            -quality 70 \
+            -resize '1600x1600>' \
+            -quality 68 \
+            -define webp:method=6 \
             -strip \
             "$output_file.tmp"
         if [ -s "$output_file.tmp" ]; then
@@ -118,18 +126,32 @@ optimize_image_webp() {
         fi
     fi
     
-    # WebP가 원본보다 작은 경우만 사용, 그렇지 않으면 원본 JPG 유지
-    if [ "$new_size" -lt "$file_size" ]; then
-        # WebP가 더 작음 - 사용
+    # WebP(full) 저장 (실패 시 JPG fallback)
+    if [ -f "$output_file.tmp" ] && [ -s "$output_file.tmp" ]; then
         mv "$output_file.tmp" "$output_file"
-        local compression_ratio=$((100 - (new_size * 100 / file_size)))
-        echo "✅ WebP 변환 완료: $filename (${file_size_mb}MB → ${new_size_mb}MB, ${compression_ratio}% 압축)"
+        echo "✅ WebP(full) 생성 완료: $filename (${file_size_mb}MB → ${new_size_mb}MB)"
     else
-        # WebP가 더 큼 - 원본 JPG 사용
         rm -f "$output_file.tmp"
         local jpg_output="${output_file%.webp}.jpg"
         cp "$original_file" "$jpg_output"
-        echo "⚠️  WebP가 더 큼 - 원본 JPG 유지: $filename (${file_size_mb}MB)"
+        echo "⚠️  WebP(full) 실패 - 원본 JPG 유지: $filename (${file_size_mb}MB)"
+    fi
+
+    # 썸네일 생성 (thumb: 최대 600px)
+    echo "  🔧 WebP(thumb) 생성 (max 600px): $original_file → $thumb_file"
+    $CONVERT_PATH "$original_file" \
+        -auto-orient \
+        -resize '600x600>' \
+        -quality 70 \
+        -define webp:method=6 \
+        -strip \
+        "$thumb_file.tmp"
+
+    if [ -f "$thumb_file.tmp" ] && [ -s "$thumb_file.tmp" ]; then
+        mv "$thumb_file.tmp" "$thumb_file"
+    else
+        rm -f "$thumb_file.tmp"
+        echo "⚠️  WebP(thumb) 생성 실패 (full을 썸네일로 사용하게 됨)"
     fi
 }
 
@@ -196,6 +218,14 @@ echo "📊 최종 결과 (갤러리 WebP):"
 for i in 1 2 3 4 5 6 7 8 9; do
     if [ -f "$GALLERY_DIR/image${i}.webp" ]; then
         ls -lh "$GALLERY_DIR/image${i}.webp"
+    fi
+done
+
+echo ""
+echo "📊 최종 결과 (썸네일 WebP):"
+for i in 1 2 3 4 5 6 7 8 9; do
+    if [ -f "$THUMBS_DIR/image${i}.webp" ]; then
+        ls -lh "$THUMBS_DIR/image${i}.webp"
     fi
 done
 
