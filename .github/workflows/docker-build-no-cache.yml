@@ -13,11 +13,11 @@ on:
 
 env:
   # Docker Hub
-  IMAGE_NAME: montkim9/wedding-invitation
+  IMAGE_NAME: montkim9/invi2
 
   # montstrap repo / path
   MONTSTRAP_REPO: idoyo7/montstrap
-  MONTSTRAP_DIR: wedding-invitation/manifests
+  MONTSTRAP_DIR: wedding-invitation2/manifests
   MONTSTRAP_FILE: deployment.yaml
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
       short_sha: ${{ steps.vars.outputs.short_sha }}
       # NOTE: image_tag output sometimes resolves empty in downstream jobs.
       # Derive it from short_sha to make it deterministic.
-      image_tag: ${{ format('montkim9/wedding-invitation:{0}', steps.vars.outputs.short_sha) }}
+      image_tag: ${{ format('montkim9/invi2:{0}', steps.vars.outputs.short_sha) }}
 
     steps:
       - name: Checkout code
@@ -139,7 +139,7 @@ jobs:
     env:
       SHORT_SHA: ${{ needs.build-and-push.outputs.short_sha }}
       # Don't rely on needs.*.outputs.image_tag (it may be empty); compute from SHORT_SHA.
-      IMAGE_TAG: ${{ format('montkim9/wedding-invitation:{0}', needs.build-and-push.outputs.short_sha) }}
+      IMAGE_TAG: ${{ format('montkim9/invi2:{0}', needs.build-and-push.outputs.short_sha) }}
 
     steps:
       - name: Validate computed image tag (fail fast)
