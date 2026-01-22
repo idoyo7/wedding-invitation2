@@ -176,44 +176,41 @@ jobs:
           echo ""
           ls -la montstrap/
 
-      - name: Update manifests for both apps
+      - name: Update manifest for wedding-app-external
         id: update_manifests
         run: |
           set -euo pipefail
           cd montstrap
 
-          MANIFEST_DIRS=("wedding-app/manifests" "wedding-app-external/manifests")
-          CHANGES_MADE=false
+          MANIFEST_DIR="wedding-app-external/manifests"
+          MANIFEST_FILE="${MANIFEST_DIR}/${{ env.MONTSTRAP_FILE }}"
           
-          for MANIFEST_DIR in "${MANIFEST_DIRS[@]}"; do
-            MANIFEST_FILE="${MANIFEST_DIR}/${{ env.MONTSTRAP_FILE }}"
-            
-            echo "--- Processing ${MANIFEST_FILE} ---"
-            
-            if [ ! -f "${MANIFEST_FILE}" ]; then
-              echo "❌ Manifest not found: ${MANIFEST_FILE}"
-              continue
-            fi
+          echo "--- Processing ${MANIFEST_FILE} ---"
+          
+          if [ ! -f "${MANIFEST_FILE}" ]; then
+            echo "❌ Manifest not found: ${MANIFEST_FILE}"
+            exit 1
+          fi
 
-            echo "--- Before ---"
-            grep -n "image:" "${MANIFEST_FILE}" || true
+          echo "--- Before ---"
+          grep -n "image:" "${MANIFEST_FILE}" || true
 
-            if [ -z "${IMAGE_TAG}" ]; then
-              echo "❌ IMAGE_TAG is empty. Refusing to run sed replacement." >&2
-              exit 1
-            fi
+          if [ -z "${IMAGE_TAG}" ]; then
+            echo "❌ IMAGE_TAG is empty. Refusing to run sed replacement." >&2
+            exit 1
+          fi
 
-            # Update image tag
-            if grep -Eq "^[[:space:]]*image:[[:space:]]*${{ env.IMAGE_NAME }}:" "${MANIFEST_FILE}"; then
-              sed -i -E "s|(^[[:space:]]*image:[[:space:]]*)${{ env.IMAGE_NAME }}:.*|\\1${IMAGE_TAG}|g" "${MANIFEST_FILE}"
-              CHANGES_MADE=true
-            else
-              echo "⚠️ No matching image line for ${{ env.IMAGE_NAME }} found in ${MANIFEST_FILE}"
-            fi
+          # Update image tag
+          if grep -Eq "^[[:space:]]*image:[[:space:]]*${{ env.IMAGE_NAME }}:" "${MANIFEST_FILE}"; then
+            sed -i -E "s|(^[[:space:]]*image:[[:space:]]*)${{ env.IMAGE_NAME }}:.*|\\1${IMAGE_TAG}|g" "${MANIFEST_FILE}"
+            CHANGES_MADE=true
+          else
+            echo "⚠️ No matching image line for ${{ env.IMAGE_NAME }} found in ${MANIFEST_FILE}"
+            CHANGES_MADE=false
+          fi
 
-            echo "--- After ---"
-            grep -n "image:" "${MANIFEST_FILE}" || true
-          done
+          echo "--- After ---"
+          grep -n "image:" "${MANIFEST_FILE}" || true
           
           echo "changes_made=${CHANGES_MADE}" >> "$GITHUB_OUTPUT"
 
@@ -228,8 +225,8 @@ jobs:
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
           git status
-          git add wedding-app/manifests/${{ env.MONTSTRAP_FILE }} wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}
-          git commit -m "🚀 Update invi2 image tag to ${SHORT_SHA} for both apps"
+          git add wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}
+          git commit -m "🚀 Update invi2 image tag to ${SHORT_SHA} for wedding-app-external"
 
           # main/master 어느 브랜치인지 자동으로 맞춰 푸시
           BRANCH="${GITHUB_REF_NAME}"
@@ -242,7 +239,7 @@ jobs:
           echo "### 🚀 Deployment Manifest Update Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Repo:** \`${{ env.MONTSTRAP_REPO }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Files:** \`wedding-app/manifests/${{ env.MONTSTRAP_FILE }}\`, \`wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**File:** \`wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image Tag:** \`${IMAGE_TAG}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.update_manifests.outputs.changes_made || 'false' }}" = "true" ]; then
@@ -266,7 +263,7 @@ jobs:
           echo "Docker image built/pushed and manifest updated." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image Tag:** \`${IMAGE_TAG}\` (and \`${{ env.IMAGE_NAME }}:latest\`)" >> $GITHUB_STEP_SUMMARY
-          echo "**Manifests:** \`${{ env.MONTSTRAP_REPO }}/wedding-app/manifests/${{ env.MONTSTRAP_FILE }}\`, \`${{ env.MONTSTRAP_REPO }}/wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifest:** \`${{ env.MONTSTRAP_REPO }}/wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**SHA:** \`${SHORT_SHA}\`" >> $GITHUB_STEP_SUMMARY
 
   failure-notification:
