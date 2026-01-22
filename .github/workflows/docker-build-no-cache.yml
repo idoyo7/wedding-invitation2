@@ -16,7 +16,7 @@ env:
   IMAGE_NAME: montkim9/invi2
 
   # montstrap repo / path
-  MONTSTRAP_REPO: idoyo7/montstrap
+  MONTSTRAP_REPO: idoyo7/montstrap-manifest
   MONTSTRAP_DIR: wedding-invitation2/manifests
   MONTSTRAP_FILE: deployment.yaml
 
