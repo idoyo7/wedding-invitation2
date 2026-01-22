@@ -39,8 +39,7 @@ RUN echo "🖼️ WebP 이미지 최적화 시작..." && \
                 convert "public/images/original/image${i}.jpg" \
                     -auto-orient \
                     -resize '1920x1920>' \
-                    -quality 82 \
-                    -define webp:method=6 \
+                    -quality 65 \
                     -strip \
                     "public/images/gallery/image${i}.webp.tmp"; \
                 if [ -s "public/images/gallery/image${i}.webp.tmp" ]; then \
@@ -55,8 +54,7 @@ RUN echo "🖼️ WebP 이미지 최적화 시작..." && \
                 convert "public/images/original/image${i}.jpg" \
                     -auto-orient \
                     -resize '600x600>' \
-                    -quality 70 \
-                    -define webp:method=6 \
+                    -quality 65 \
                     -strip \
                     "public/images/gallery/thumbs/image${i}.webp.tmp"; \
                 if [ -s "public/images/gallery/thumbs/image${i}.webp.tmp" ]; then \
@@ -77,11 +75,11 @@ RUN echo "🖼️ WebP 이미지 최적화 시작..." && \
     else \
         echo "❌ ImageMagick 없음, 원본 JPG 유지"; \
     fi && \
-    echo "🖼️ Hero 이미지 WebP 생성 (ha0h-1fsi-bqt3.jpg → .webp, 리사이즈)..." && \
+    echo "🖼️ Hero 이미지 WebP 생성 (ha0h-1fsi-bqt3.jpg → .webp)..." && \
     if command -v convert >/dev/null 2>&1 && [ -f "public/images/ha0h-1fsi-bqt3.jpg" ]; then \
         convert "public/images/ha0h-1fsi-bqt3.jpg" \
             -auto-orient \
-            -quality 95 \
+            -quality 65 \
             -strip \
             "public/images/ha0h-1fsi-bqt3.webp.tmp" && \
         if [ -s "public/images/ha0h-1fsi-bqt3.webp.tmp" ]; then \
