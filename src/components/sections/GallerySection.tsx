@@ -629,43 +629,47 @@ const LoadingSpinnerContainer = styled.div`
 const GalleryGridContainer = styled.div`
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  max-width: 800px;
+  gap: 1.5rem;
+  max-width: 600px;
   margin: 2rem auto 0;
   padding: 0 1rem;
   
   /* 세로형 사진일 때 간격 조정 */
-  row-gap: 1.5rem; /* 세로 간격을 좀 더 늘림 */
+  row-gap: 2rem; /* 세로 간격을 좀 더 늘림 */
   
-  /* 13개 이미지를 위한 특별한 레이아웃 (4-4-4-1 배치) */
-  & > div:nth-child(13) {
-    grid-column: 2 / 3; /* 마지막 이미지를 가운데 열에 배치 */
+  /* 3개 이미지를 위한 균등 배치 */
+  & > div {
     justify-self: center;
   }
   
   @media (max-width: 768px) {
-    gap: 0.5rem;
-    row-gap: 1rem; /* 모바일에서 세로 간격 */
+    gap: 1rem;
+    row-gap: 1.5rem; /* 모바일에서 세로 간격 */
     padding: 0 0.5rem;
     margin-top: 1.5rem;
     max-width: 100%;
-    
-    /* 모바일에서도 3열 유지, 마지막 이미지 중앙 배치 */
-    & > div:nth-child(13) {
-      grid-column: 2 / 3;
-      justify-self: center;
-    }
+    grid-template-columns: repeat(3, 1fr);
   }
   
   @media (max-width: 480px) {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-    row-gap: 1.25rem; /* 작은 모바일에서 세로 간격 더 늘림 */
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    row-gap: 1rem; 
+    max-width: 350px;
     
-    /* 작은 모바일에서는 마지막 이미지를 두 칸에 걸쳐 배치 */
-    & > div:nth-child(13) {
-      grid-column: 1 / 3;
-      justify-self: center;
+    /* 작은 모바일에서도 3개를 한 줄에 배치 */
+    & > div {
+      max-width: 100px;
+    }
+  }
+  
+  @media (max-width: 360px) {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    max-width: 250px;
+    
+    /* 매우 작은 화면에서는 세로로 배치 */
+    & > div {
       max-width: 200px;
     }
   }

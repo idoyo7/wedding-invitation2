@@ -103,12 +103,6 @@ export const weddingConfig = {
       "/images/gallery/image1.webp",
       "/images/gallery/image2.webp",
       "/images/gallery/image3.webp",
-      "/images/gallery/image4.webp",
-      "/images/gallery/image5.webp",
-      "/images/gallery/image6.webp",
-      "/images/gallery/image7.webp",
-      "/images/gallery/image8.webp",
-      "/images/gallery/image9.webp",
     ],
   } as GalleryConfig,
 
@@ -129,37 +123,37 @@ export const weddingConfig = {
     },
   },
 
-  // 계좌번호 (비활성화)
+  // 계좌번호
   account: {
-    enabled: false, // 계좌번호 섹션 비활성화
+    enabled: true, // 계좌번호 섹션 활성화
     groom: {
-      bank: "은행명",
-      number: "123-456-789012",
+      bank: "신한은행",
+      number: "110-435-910271",
       holder: "김예준",
     },
     bride: {
-      bank: "은행명",
-      number: "987-654-321098",
+      bank: "신한은행",
+      number: "110-495-069227",
       holder: "박영서",
     },
     groomFather: {
-      bank: "은행명",
-      number: "111-222-333444",
+      bank: "하나은행",
+      number: "152-004674-00107",
       holder: "김영진",
     },
     groomMother: {
-      bank: "은행명",
-      number: "555-666-777888",
+      bank: "신한은행",
+      number: "110-074-863512",
       holder: "이혜영",
     },
     brideFather: {
-      bank: "은행명",
-      number: "999-000-111222",
+      bank: "국민은행",
+      number: "546925-01-055438",
       holder: "박동수",
     },
     brideMother: {
-      bank: "은행명",
-      number: "333-444-555666",
+      bank: "국민은행",
+      number: "465102-01-215246",
       holder: "김선미",
     }
   },
