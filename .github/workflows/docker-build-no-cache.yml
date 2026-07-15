@@ -176,43 +176,27 @@ jobs:
           echo ""
           ls -la montstrap/
 
-      - name: Update manifest for wedding-app-external
+      - name: Update stage image tag (kustomization newTag)
         id: update_manifests
         run: |
           set -euo pipefail
           cd montstrap
 
-          MANIFEST_DIR="wedding-app-external/manifests"
-          MANIFEST_FILE="${MANIFEST_DIR}/${{ env.MONTSTRAP_FILE }}"
-          
-          echo "--- Processing ${MANIFEST_FILE} ---"
-          
-          if [ ! -f "${MANIFEST_FILE}" ]; then
-            echo "❌ Manifest not found: ${MANIFEST_FILE}"
+          # 태그 전용 파일(kustomization images[].newTag)만 bump — deployment.yaml(사람 편집)은 안 건드림.
+          # (기존 버그 수정: 경로에 stage/ 누락 + bare 이미지에 콜론 guard 로 여태 bump 안 됨)
+          KUSTOMIZATION="stage/wedding-app-external/manifests/kustomization.yaml"
+          if [ ! -f "${KUSTOMIZATION}" ]; then
+            echo "❌ Kustomization not found: ${KUSTOMIZATION}"
             exit 1
           fi
 
-          echo "--- Before ---"
-          grep -n "image:" "${MANIFEST_FILE}" || true
+          echo "--- Before ---"; grep -n "newTag" "${KUSTOMIZATION}" || true
+          yq eval -i \
+            '(.images[] | select(.name == "montkim9/invi2")).newTag = strenv(SHORT_SHA)' \
+            "${KUSTOMIZATION}"
+          echo "--- After ---"; cat "${KUSTOMIZATION}"
 
-          if [ -z "${IMAGE_TAG}" ]; then
-            echo "❌ IMAGE_TAG is empty. Refusing to run sed replacement." >&2
-            exit 1
-          fi
-
-          # Update image tag
-          if grep -Eq "^[[:space:]]*image:[[:space:]]*${{ env.IMAGE_NAME }}:" "${MANIFEST_FILE}"; then
-            sed -i -E "s|(^[[:space:]]*image:[[:space:]]*)${{ env.IMAGE_NAME }}:.*|\\1${IMAGE_TAG}|g" "${MANIFEST_FILE}"
-            CHANGES_MADE=true
-          else
-            echo "⚠️ No matching image line for ${{ env.IMAGE_NAME }} found in ${MANIFEST_FILE}"
-            CHANGES_MADE=false
-          fi
-
-          echo "--- After ---"
-          grep -n "image:" "${MANIFEST_FILE}" || true
-          
-          echo "changes_made=${CHANGES_MADE}" >> "$GITHUB_OUTPUT"
+          echo "changes_made=true" >> "$GITHUB_OUTPUT"
 
 
       - name: Commit and push changes to montstrap
@@ -224,14 +208,15 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
-          git status
-          git add wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}
+          git add stage/wedding-app-external/manifests/kustomization.yaml
           git commit -m "🚀 Update invi2 image tag to ${SHORT_SHA} for wedding-app-external"
 
-          # main/master 어느 브랜치인지 자동으로 맞춰 푸시
-          BRANCH="${GITHUB_REF_NAME}"
-          echo "Pushing to branch: ${BRANCH}"
-          git push origin "${BRANCH}"
+          # montstrap-manifest 기본 브랜치는 main. 공유 repo 동시푸시 경합 대비 rebase 재시도 x3
+          for i in 1 2 3; do
+            git push origin main && exit 0
+            git pull --rebase origin main
+          done
+          git push origin main
 
       - name: Update Summary
         if: always()
