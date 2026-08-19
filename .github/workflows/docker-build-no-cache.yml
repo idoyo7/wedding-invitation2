@@ -176,7 +176,7 @@ jobs:
           echo ""
           ls -la montstrap/
 
-      - name: Update stage image tag (kustomization newTag)
+      - name: Update hub image tag (kustomization newTag)
         id: update_manifests
         run: |
           set -euo pipefail
@@ -184,7 +184,7 @@ jobs:
 
           # 태그 전용 파일(kustomization images[].newTag)만 bump — deployment.yaml(사람 편집)은 안 건드림.
           # (기존 버그 수정: 경로에 stage/ 누락 + bare 이미지에 콜론 guard 로 여태 bump 안 됨)
-          KUSTOMIZATION="stage/wedding-app-external/manifests/kustomization.yaml"
+          KUSTOMIZATION="hub/wedding-app-external/manifests/kustomization.yaml"
           if [ ! -f "${KUSTOMIZATION}" ]; then
             echo "❌ Kustomization not found: ${KUSTOMIZATION}"
             exit 1
@@ -208,7 +208,7 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
-          git add stage/wedding-app-external/manifests/kustomization.yaml
+          git add hub/wedding-app-external/manifests/kustomization.yaml
           git commit -m "🚀 Update invi2 image tag to ${SHORT_SHA} for wedding-app-external"
 
           # montstrap-manifest 기본 브랜치는 main. 공유 repo 동시푸시 경합 대비 rebase 재시도 x3
