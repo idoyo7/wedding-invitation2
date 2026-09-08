@@ -6,6 +6,7 @@ import { GlobalStyle } from "../src/styles/globalStyles";
 import FallingElements from "../src/components/effects/FallingElements";
 import PageTransition from "../src/components/effects/PageTransition";
 import EffectsController from "../src/components/effects/EffectsController";
+import HyperDXInit from "./hyperdx-init";
 import "./globals.css";
 
 export default function RootLayout({
@@ -28,6 +29,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
       </head>
       <body>
+        <HyperDXInit />
         <StyledComponentsRegistry>
           <GlobalStyle />
           <FallingElements />
