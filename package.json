@@ -13,6 +13,7 @@
     "optimize-images-webp": "chmod +x ./scripts/optimize-images-webp.sh && ./scripts/optimize-images-webp.sh"
   },
   "dependencies": {
+    "@hyperdx/browser": "^0.26.0",
     "framer-motion": "^12.12.1",
     "next": "^15.5.9",
     "react": "^19.0.0",
