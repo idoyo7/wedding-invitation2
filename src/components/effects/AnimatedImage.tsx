@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import Image from 'next/image';
 import styled from 'styled-components';
 import { weddingConfig } from '../../config/wedding-config';
@@ -36,7 +36,7 @@ const AnimatedImage: React.FC<AnimatedImageProps> = ({
   const [isLoaded, setIsLoaded] = useState(false);
   const { effects } = weddingConfig;
 
-  const imageVariants = {
+  const imageVariants: Variants = {
     hidden: { 
       opacity: 0, 
       scale: 0.8 
