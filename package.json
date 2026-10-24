@@ -29,5 +29,8 @@
     "@types/styled-components": "^5.1.36",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "fflate": "0.7.5"
   }
 }
