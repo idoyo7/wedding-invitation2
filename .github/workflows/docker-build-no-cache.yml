@@ -173,7 +173,7 @@ jobs:
           set -euo pipefail
           cd montstrap-manifest
 
-          # hub: 태그 전용 파일(kustomization images[].newTag)만 yq 로 bump — deployment.yaml(사람 편집)은 안 건드림.
+          # hub: (all-digit 태그는 yq 가 따옴표를 붙여 grep 에 따옴표 허용) 태그 전용 파일(kustomization images[].newTag)만 yq 로 bump — deployment.yaml(사람 편집)은 안 건드림.
           for K in \
             hub/wedding-app-external/manifests/kustomization.yaml \
             hub/wedding-app/manifests/kustomization.yaml; do
@@ -181,7 +181,7 @@ jobs:
             yq eval -i \
               '(.images[] | select(.name == "montkim9/invi2")).newTag = strenv(SHORT_SHA)' \
               "${K}"
-            grep -q "newTag: ${SHORT_SHA}" "${K}" || { echo "❌ newTag not updated in ${K}"; exit 1; }
+            grep -Eq "newTag: \"?${SHORT_SHA}\"?\s*$" "${K}" || { echo "❌ newTag not updated in ${K}"; exit 1; }
           done
 
           # edge: kustomize 미이관(plain apply) → deployment.yaml 의 image 줄만 sed
