@@ -17,7 +17,7 @@ env:
 
   # montstrap repo / path
   MONTSTRAP_REPO: idoyo7/montstrap-manifest
-  MONTSTRAP_FILE: deployment.yaml
+  MONTSTRAP_APP_REPO: idoyo7/montstrap
 
 jobs:
   build-and-push:
@@ -125,7 +125,7 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
   update-manifests:
-    name: Update montstrap deployment manifest
+    name: Update montstrap / montstrap-manifest image tags
     needs: build-and-push
     runs-on: ubuntu-latest
 
@@ -160,47 +160,85 @@ jobs:
               ;;
           esac
 
-      - name: Checkout montstrap repository
+      - name: Checkout montstrap-manifest repository
         uses: actions/checkout@v7
         with:
           repository: ${{ env.MONTSTRAP_REPO }}
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-          path: montstrap
+          path: montstrap-manifest
 
-      - name: Verify montstrap checkout
-        run: |
-          echo "--- Verifying montstrap repository checkout ---"
-          echo "Repository: ${{ env.MONTSTRAP_REPO }}"
-          echo "SHORT_SHA: ${SHORT_SHA}"
-          echo "IMAGE_TAG: ${IMAGE_TAG}"
-          echo ""
-          ls -la montstrap/
-
-      - name: Update hub image tag (kustomization newTag)
+      - name: Update montstrap-manifest (hub kustomization x2 + edge deployment)
         id: update_manifests
+        run: |
+          set -euo pipefail
+          cd montstrap-manifest
+
+          # hub: 태그 전용 파일(kustomization images[].newTag)만 yq 로 bump — deployment.yaml(사람 편집)은 안 건드림.
+          for K in \
+            hub/wedding-app-external/manifests/kustomization.yaml \
+            hub/wedding-app/manifests/kustomization.yaml; do
+            [ -f "${K}" ] || { echo "❌ Kustomization not found: ${K}"; exit 1; }
+            yq eval -i \
+              '(.images[] | select(.name == "montkim9/invi2")).newTag = strenv(SHORT_SHA)' \
+              "${K}"
+            grep -q "newTag: ${SHORT_SHA}" "${K}" || { echo "❌ newTag not updated in ${K}"; exit 1; }
+          done
+
+          # edge: kustomize 미이관(plain apply) → deployment.yaml 의 image 줄만 sed
+          D=edge/wedding-app-external/manifests/deployment.yaml
+          [ -f "${D}" ] || { echo "❌ Deployment not found: ${D}"; exit 1; }
+          sed -i 's|image: montkim9/invi2:.*|image: montkim9/invi2:'"${SHORT_SHA}"'|' "${D}"
+          grep -q "image: montkim9/invi2:${SHORT_SHA}" "${D}" || { echo "❌ image not updated in ${D}"; exit 1; }
+
+          git diff
+          echo "changes_made=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push changes to montstrap-manifest
+        if: steps.update_manifests.outputs.changes_made == 'true'
+        run: |
+          set -euo pipefail
+          cd montstrap-manifest
+
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+          git add hub/wedding-app-external/manifests/kustomization.yaml \
+                  hub/wedding-app/manifests/kustomization.yaml \
+                  edge/wedding-app-external/manifests/deployment.yaml
+          git diff --cached --quiet || git commit -m "🚀 Update invi2 image tag to ${SHORT_SHA} (wedding-app hub/edge, wedding-app-external hub/edge)"
+
+          # 공유 repo 동시푸시 경합 대비 rebase 재시도 x3
+          for i in 1 2 3; do
+            git push origin main && exit 0
+            git pull --rebase origin main
+          done
+          git push origin main
+
+      # montstrap(별도 repo) 는 권한이 다를 수 있어 manifest 반영 뒤에 둔다. 실패하면 잡이 실패로 드러난다.
+      - name: Checkout montstrap repository
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.MONTSTRAP_APP_REPO }}
+          token: ${{ secrets.MONTSTRAP_TOKEN || secrets.PERSONAL_GITHUB_TOKEN }}
+          path: montstrap
+          ref: main
+
+      - name: Update montstrap edge deployment (we.montkim.com)
+        id: update_montstrap
         run: |
           set -euo pipefail
           cd montstrap
 
-          # 태그 전용 파일(kustomization images[].newTag)만 bump — deployment.yaml(사람 편집)은 안 건드림.
-          # (기존 버그 수정: 경로에 stage/ 누락 + bare 이미지에 콜론 guard 로 여태 bump 안 됨)
-          KUSTOMIZATION="hub/wedding-app-external/manifests/kustomization.yaml"
-          if [ ! -f "${KUSTOMIZATION}" ]; then
-            echo "❌ Kustomization not found: ${KUSTOMIZATION}"
-            exit 1
-          fi
+          D=edge/wedding-invitation/manifests/deployment.yaml
+          [ -f "${D}" ] || { echo "❌ Deployment not found: ${D}"; exit 1; }
+          sed -i 's|image: montkim9/invi2:.*|image: montkim9/invi2:'"${SHORT_SHA}"'|' "${D}"
+          grep -q "image: montkim9/invi2:${SHORT_SHA}" "${D}" || { echo "❌ image not updated in ${D}"; exit 1; }
 
-          echo "--- Before ---"; grep -n "newTag" "${KUSTOMIZATION}" || true
-          yq eval -i \
-            '(.images[] | select(.name == "montkim9/invi2")).newTag = strenv(SHORT_SHA)' \
-            "${KUSTOMIZATION}"
-          echo "--- After ---"; cat "${KUSTOMIZATION}"
-
+          git diff
           echo "changes_made=true" >> "$GITHUB_OUTPUT"
 
-
       - name: Commit and push changes to montstrap
-        if: steps.update_manifests.outputs.changes_made == 'true'
+        if: steps.update_montstrap.outputs.changes_made == 'true'
         run: |
           set -euo pipefail
           cd montstrap
@@ -208,10 +246,9 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
-          git add hub/wedding-app-external/manifests/kustomization.yaml
-          git commit -m "🚀 Update invi2 image tag to ${SHORT_SHA} for wedding-app-external"
+          git add edge/wedding-invitation/manifests/deployment.yaml
+          git diff --cached --quiet || git commit -m "🚀 Update invi2 image tag to ${SHORT_SHA} (wedding-invitation edge)"
 
-          # montstrap-manifest 기본 브랜치는 main. 공유 repo 동시푸시 경합 대비 rebase 재시도 x3
           for i in 1 2 3; do
             git push origin main && exit 0
             git pull --rebase origin main
@@ -223,14 +260,21 @@ jobs:
         run: |
           echo "### 🚀 Deployment Manifest Update Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Repo:** \`${{ env.MONTSTRAP_REPO }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**File:** \`wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image Tag:** \`${IMAGE_TAG}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Targets:**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.MONTSTRAP_REPO }}\`: hub/wedding-app-external, hub/wedding-app (kustomization newTag), edge/wedding-app-external (deployment image)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.MONTSTRAP_APP_REPO }}\`: edge/wedding-invitation (deployment image)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.update_manifests.outputs.changes_made || 'false' }}" = "true" ]; then
-            echo "✅ Updated and pushed successfully." >> $GITHUB_STEP_SUMMARY
+            echo "✅ montstrap-manifest updated." >> $GITHUB_STEP_SUMMARY
           else
-            echo "ℹ️ No changes were needed (or update step did not run)." >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ montstrap-manifest: no changes (or step did not run)." >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.update_montstrap.outputs.changes_made || 'false' }}" = "true" ]; then
+            echo "✅ montstrap updated." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ montstrap: no changes (or step did not run)." >> $GITHUB_STEP_SUMMARY
           fi
 
   deploy-ready:
@@ -248,7 +292,7 @@ jobs:
           echo "Docker image built/pushed and manifest updated." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image Tag:** \`${IMAGE_TAG}\` (and \`${{ env.IMAGE_NAME }}:latest\`)" >> $GITHUB_STEP_SUMMARY
-          echo "**Manifest:** \`${{ env.MONTSTRAP_REPO }}/wedding-app-external/manifests/${{ env.MONTSTRAP_FILE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifests:** \`${{ env.MONTSTRAP_REPO }}\` (hub x2, edge x1), \`${{ env.MONTSTRAP_APP_REPO }}\` (edge x1)" >> $GITHUB_STEP_SUMMARY
           echo "**SHA:** \`${SHORT_SHA}\`" >> $GITHUB_STEP_SUMMARY
 
   failure-notification:
